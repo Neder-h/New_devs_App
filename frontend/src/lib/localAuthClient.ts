@@ -1,3 +1,5 @@
+import { decodeJWTPayload } from '../utils/jwtUtils';
+
 // Local authentication client to replace Supabase
 interface AuthUser {
   id: string;
@@ -16,9 +18,11 @@ interface AuthSession {
   user: AuthUser;
   token_type: string;
   expires_in?: number;
+  expires_at?: number;
 }
 
 interface AuthResponse {
+  data: { user: AuthUser | null; session: AuthSession | null };
   user: AuthUser | null;
   session: AuthSession | null;
   error: Error | null;
@@ -99,19 +103,27 @@ class LocalAuthClient {
       const session: AuthSession = {
         access_token: data.access_token,
         token_type: data.token_type || 'bearer',
-        user: data.user,
+        user: {
+          ...data.user,
+          app_metadata: { ...data.user.app_metadata, tenant_id: data.user.tenant_id },
+          user_metadata: { ...data.user.user_metadata, name: data.user.name },
+        },
+        expires_at: decodeJWTPayload(data.access_token)?.exp,
       };
 
       this.saveSession(session);
 
       return {
-        user: data.user,
-        session: session,
+        data: { user: session.user, session },
+        // Keep the root fields for existing callers in lib/auth.ts.
+        user: session.user,
+        session,
         error: null,
       };
     } catch (error: any) {
       console.error('[LocalAuth] Sign in failed:', error);
       return {
+        data: { user: null, session: null },
         user: null,
         session: null,
         error: error,
@@ -145,36 +157,28 @@ class LocalAuthClient {
   }
 
   async getSession(): Promise<{ data: { session: AuthSession | null } }> {
-    // Check if current session is still valid
-    if (this.session?.access_token) {
-      try {
-        // Verify token is still valid by calling a protected endpoint
-        const response = await fetch(`${this.getApiUrl()}/api/v1/auth/me`, {
-          headers: {
-            'Authorization': `Bearer ${this.session.access_token}`,
-          },
-        });
+    const session = this.session;
+    if (!session?.access_token) return { data: { session: null } };
 
-        if (response.ok) {
-          return { data: { session: this.session } };
-        } else {
-          // Session invalid, clear it
-          this.saveSession(null);
-        }
-      } catch (error) {
-        console.warn('[LocalAuth] Session validation failed:', error);
+    try {
+      const response = await fetch(`${this.getApiUrl()}/api/v1/auth/me`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      // An old validation request must not sign out a newly selected account.
+      if (this.session === session && response.status === 401) {
         this.saveSession(null);
       }
+    } catch (error) {
+      console.warn('[LocalAuth] Session validation unavailable:', error);
     }
-
-    return { data: { session: null } };
+    return { data: { session: this.session } };
   }
 
-  async getUser(token?: string): Promise<{ user: AuthUser | null }> {
+  async getUser(token?: string): Promise<{ data: { user: AuthUser | null }; user: AuthUser | null; error: Error | null }> {
     const tokenToUse = token || this.session?.access_token;
 
     if (!tokenToUse) {
-      return { user: null };
+      return { data: { user: null }, user: null, error: null };
     }
 
     try {
@@ -186,13 +190,13 @@ class LocalAuthClient {
 
       if (response.ok) {
         const userData = await response.json();
-        return { user: userData };
+        return { data: { user: userData }, user: userData, error: null };
       } else {
-        return { user: null };
+        return { data: { user: null }, user: null, error: null };
       }
     } catch (error) {
       console.error('[LocalAuth] Get user failed:', error);
-      return { user: null };
+      return { data: { user: null }, user: null, error: null };
     }
   }
 

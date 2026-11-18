@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { SecureAPI } from '../lib/secureApi';
 import { authOptimizer } from '../utils/authOptimizer';
 import { sessionRecovery } from '../utils/sessionRecovery';
 import { sessionPersistenceManager } from '../utils/SessionPersistenceManager';
@@ -198,6 +199,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const customEvent = event as CustomEvent;
       console.error('[AuthContext] Session expired and could not be recovered:', customEvent.detail);
       // Force logout
+      SecureAPI.setAccessToken(null);
       setUser(null);
       setIsAuthenticated(false);
     };
@@ -205,6 +207,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Set up auth state change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      SecureAPI.setAccessToken(session?.access_token ?? null);
       console.log('🔍 [AuthContext] Auth state changed EVENT:', event);
       console.log('🔍 [AuthContext] Session present:', !!session);
 
@@ -270,6 +273,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // 0. SET LOGOUT FLAG FIRST - prevents ALL session recovery attempts
       (window as any).__isLoggingOut = true;
+      SecureAPI.setAccessToken(null);
       console.log('[AuthContext] Logout flag set - blocking all session recovery');
 
       // 1. Clear storage IMMEDIATELY before anything else
