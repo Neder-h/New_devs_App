@@ -37,10 +37,10 @@ async def calculate_total_revenue(property_id: str, tenant_id: str) -> Dict[str,
     """
     try:
         # Import database pool
-        from app.core.database_pool import DatabasePool
+        from app.core.database_pool import db_pool
         
         # Initialize pool if needed
-        db_pool = DatabasePool()
+        # Reuse the shared pool instead of creating an engine per request.
         await db_pool.initialize()
         
         if db_pool.session_factory:
