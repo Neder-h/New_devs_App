@@ -37,6 +37,22 @@ const getBackendUrl = () => {
 
 const BACKEND_URL = getBackendUrl();
 
+export interface DashboardProperty {
+  id: string;
+  name: string;
+  timezone: string;
+}
+
+export interface DashboardSummary {
+  property_id: string;
+  total_revenue: string;
+  currency: string;
+  reservations_count: number;
+  timezone: string;
+  month: number | null;
+  year: number | null;
+}
+
 export class TenantIsolationError extends Error {
   constructor(message: string) {
     super(message);
@@ -1470,23 +1486,15 @@ export class SecureAPIClient {
   }
 
   // ============= DASHBOARD API =============
-  /**
-   * Get dashboard summary with optional simulation header
-   */
-  async getDashboardSummary(propertyId: string, options?: { simulatedTenant?: string, timestamp?: number }) {
+  async getDashboardProperties() {
+    return this.request<DashboardProperty[]>('/api/v1/dashboard/properties');
+  }
+
+  async getDashboardSummary(propertyId: string, period?: { month?: number; year?: number }) {
     const queryParams = new URLSearchParams({ property_id: propertyId });
-    if (options?.timestamp) {
-      queryParams.append('_t', options.timestamp.toString());
-    }
-
-    const requestOptions: RequestInit = {};
-    if (options?.simulatedTenant) {
-      requestOptions.headers = {
-        'X-Simulated-Tenant': options.simulatedTenant
-      };
-    }
-
-    return this.request<any>(`/api/v1/dashboard/summary?${queryParams}`, requestOptions);
+    if (period?.month !== undefined) queryParams.set('month', String(period.month));
+    if (period?.year !== undefined) queryParams.set('year', String(period.year));
+    return this.request<DashboardSummary>(`/api/v1/dashboard/summary?${queryParams}`);
   }
 
   async uploadCompanyLogo(logo_url: string) {
