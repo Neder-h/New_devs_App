@@ -1,6 +1,6 @@
 """Revenue is recognized in full on check-in, in the property's local period."""
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import text
@@ -88,10 +88,13 @@ async def _calculate_revenue(session, property_id, tenant_id, month, year):
         raise MixedCurrencyError("Cannot add different currencies without an exchange-rate policy")
 
     row = rows[0] if rows else None
+    # Sum exact database numerics first, then round once for the report.
+    total = row["total"] if row else Decimal("0")
+    total = total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     return {
         "property_id": property_id,
         "tenant_id": tenant_id,
-        "total": str(row["total"] if row else Decimal("0.00")),
+        "total": str(total),
         "currency": row["currency"] if row else "USD",
         "count": row["count"] if row else 0,
         "timezone": timezone_name,

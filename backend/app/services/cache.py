@@ -20,8 +20,8 @@ async def get_revenue_summary(
     if not tenant_id:
         raise ValueError("A tenant is required")
 
-    # JSON prevents ambiguous keys; v3 ignores entries created before period-aware reporting.
-    cache_key = "revenue:v3:" + json.dumps([tenant_id, property_id, year, month])
+    # JSON prevents ambiguous keys; v4 ignores entries created before decimal-safe reporting.
+    cache_key = "revenue:v4:" + json.dumps([tenant_id, property_id, year, month])
     try:
         cached = await redis_client.get(cache_key)
         if cached:

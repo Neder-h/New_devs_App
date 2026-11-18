@@ -100,3 +100,23 @@ class RevenueDatabaseTests(unittest.IsolatedAsyncioTestCase):
         await self.add_reservation("20", currency="EUR")
         with self.assertRaises(MixedCurrencyError):
             await self.summary()
+
+    async def test_subcent_amounts_are_summed_before_rounding(self):
+        for amount in ("333.333", "333.333", "333.334"):
+            await self.add_reservation(amount)
+        result = await self.summary(month=3, year=2024)
+        self.assertEqual(result["total"], "1000.00")
+
+    async def test_positive_half_cent_rounds_half_up(self):
+        await self.add_reservation("1.005")
+        self.assertEqual((await self.summary())["total"], "1.01")
+
+    async def test_negative_half_cent_rounds_half_away_from_zero(self):
+        await self.add_reservation("-1.005")
+        self.assertEqual((await self.summary())["total"], "-1.01")
+
+    async def test_single_non_usd_currency_is_preserved(self):
+        await self.add_reservation("123.455", currency="EUR")
+        result = await self.summary()
+        self.assertEqual(result["currency"], "EUR")
+        self.assertEqual(result["total"], "123.46")
