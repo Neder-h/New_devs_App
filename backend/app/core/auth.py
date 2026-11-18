@@ -83,7 +83,11 @@ async def authenticate_request(
     # Check cache first
     if token_hash in auth_cache:
         cached_data = auth_cache[token_hash]
-        if datetime.now().timestamp() - cached_data["timestamp"] < CACHE_DURATION:
+        now = datetime.now().timestamp()
+        if (
+            now - cached_data["timestamp"] < CACHE_DURATION
+            and now < cached_data.get("expires_at", 0)
+        ):
             cached_user = cached_data["user"]
             # If not, force a refresh to get proper tenant isolation
             if not cached_user.tenant_id:
@@ -111,14 +115,15 @@ async def authenticate_request(
                     token, 
                     settings.secret_key, 
                     algorithms=["HS256"],
-                    audience="authenticated"  # Accept tokens with aud: "authenticated"
+                    audience="authenticated",
+                    options={"require_exp": True},
                 )
                 logger.info(f"AUTH: Successfully decoded custom JWT token for {payload.get('email')}")
                 
                 # Create a mock user object from JWT payload
                 class MockUser:
                     def __init__(self, payload):
-                        self.id = payload.get('id')
+                        self.id = payload.get('sub') or payload.get('id')
                         self.email = payload.get('email')
                         self.app_metadata = payload.get('app_metadata', {})
                         self.user_metadata = payload.get('user_metadata', {})
@@ -127,6 +132,8 @@ async def authenticate_request(
                 user = MockUser(payload)
                 
             except JWTError:
+                if not settings.supabase_url:
+                    raise
                 # If custom JWT fails, try Supabase auth
                 response = supabase.auth.get_user(token)
                 user = response.user
@@ -281,6 +288,7 @@ async def authenticate_request(
         auth_cache[token_hash] = {
             "user": auth_user,
             "timestamp": datetime.now().timestamp(),
+            "expires_at": jwt.get_unverified_claims(token).get("exp", 0),
         }
 
         # Clean up old cache entries (keep cache size manageable)
