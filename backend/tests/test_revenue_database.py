@@ -9,7 +9,9 @@ from sqlalchemy import text
 
 from app.core.database_pool import DatabasePool
 from app.services.reservations import (
-    MixedCurrencyError, PropertyNotFoundError, calculate_total_revenue,
+    MixedCurrencyError,
+    PropertyNotFoundError,
+    calculate_total_revenue,
 )
 
 
