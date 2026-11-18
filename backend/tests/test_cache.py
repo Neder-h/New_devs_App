@@ -37,7 +37,7 @@ class RevenueCacheTests(unittest.IsolatedAsyncioTestCase):
                 self.entries.clear()
                 totals = {"tenant-a": "2250.00", "tenant-b": "0.00"}
 
-                async def calculate(property_id, tenant_id):
+                async def calculate(property_id, tenant_id, **period):
                     return self.summary(tenant_id, totals[tenant_id])
 
                 with patch.object(cache, "calculate_total_revenue", side_effect=calculate) as calc:
@@ -74,3 +74,14 @@ class RevenueCacheTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             await cache.get_revenue_summary("prop-001", "")
         self.redis.get.assert_not_awaited()
+
+    async def test_reporting_periods_have_independent_cache_entries(self):
+        async def calculate(property_id, tenant_id, month=None, year=None):
+            result = self.summary(tenant_id, str(month or 0))
+            return {**result, "month": month, "year": year}
+
+        with patch.object(cache, "calculate_total_revenue", side_effect=calculate) as calc:
+            for month, year in [(2, 2024), (3, 2024), (None, 2024), (None, None)] * 2:
+                result = await cache.get_revenue_summary("prop-001", "tenant-a", month, year)
+                self.assertEqual((result["month"], result["year"]), (month, year))
+            self.assertEqual(calc.call_count, 4)
